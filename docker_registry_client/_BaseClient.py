@@ -179,7 +179,7 @@ class BaseClientV2(CommonBaseClient):
         return self._http_call('/v2/_catalog', get)
 
     def get_repository_tags(self, name):
-        self.auth.desired_scope = 'repository:%s:*' % name
+        self.auth.desired_scope = 'repository:%s:pull' % name
         return self._http_call(self.LIST_TAGS, get, name=name)
 
     def get_manifest_and_digest(self, name, reference):
