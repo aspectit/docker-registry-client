@@ -15,14 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 class CommonBaseClient(object):
-    def __init__(self, host, verify_ssl=None, username=None, password=None):
-        self.host = host
-
-        self.method_kwargs = {}
-        if verify_ssl is not None:
-            self.method_kwargs['verify'] = verify_ssl
-        if username is not None and password is not None:
-            self.method_kwargs['auth'] = (username, password)
 
     def _http_response(self, url, method, data=None, **kwargs):
         """url -> full target url
@@ -62,6 +54,15 @@ class BaseClientV1(CommonBaseClient):
     IMAGE_ANCESTRY = '/v1/images/{image_id}/ancestry'
     REPO = '/v1/repositories/{namespace}/{repository}'
     TAGS = REPO + '/tags'
+
+    def __init__(self, host, verify_ssl=None, username=None, password=None):
+        self.host = host
+
+        self.method_kwargs = {}
+        if verify_ssl is not None:
+            self.method_kwargs['verify'] = verify_ssl
+        if username is not None and password is not None:
+            self.method_kwargs['auth'] = (username, password)
 
     @property
     def version(self):
@@ -148,15 +149,21 @@ class BaseClientV2(CommonBaseClient):
     schema_1 = BASE_CONTENT_TYPE + '.v1+json'
     schema_2 = BASE_CONTENT_TYPE + '.v2+json'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, host, verify_ssl=None, username=None, password=None, **kwargs):
+        self.host = host
+
+        self.method_kwargs = {}
+        if verify_ssl is not None:
+            self.method_kwargs['verify'] = verify_ssl
+
         auth_service_url = kwargs.pop("auth_service_url", "")
-        super(BaseClientV2, self).__init__(*args, **kwargs)
+        auth_service_name = kwargs.pop("auth_service_name", "")
         self._manifest_digests = {}
         self.auth = AuthorizationService(
-            registry=self.host,
+            service=auth_service_name,
             url=auth_service_url,
-            verify=self.method_kwargs.get('verify', False),
-            auth=self.method_kwargs.get('auth', None),
+            verify=verify_ssl,
+            auth=(username, password),
         )
 
     @property
@@ -260,13 +267,15 @@ class BaseClientV2(CommonBaseClient):
         response = method(self.host + path,
                           data=data, headers=header, **self.method_kwargs)
         logger.debug("%s %s", response.status_code, response.reason)
+        if not response.ok:
+            print(response.headers.get('Www-Authenticate'))
         response.raise_for_status()
 
         return response
 
 
 def BaseClient(host, verify_ssl=None, api_version=None, username=None,
-               password=None, auth_service_url=""):
+               password=None, auth_service_url="", auth_service_name=""):
     if api_version == 1:
         return BaseClientV1(
             host, verify_ssl=verify_ssl, username=username, password=password,
@@ -274,14 +283,14 @@ def BaseClient(host, verify_ssl=None, api_version=None, username=None,
     elif api_version == 2:
         return BaseClientV2(
             host, verify_ssl=verify_ssl, username=username, password=password,
-            auth_service_url=auth_service_url,
+            auth_service_url=auth_service_url, auth_service_name=auth_service_name
         )
     elif api_version is None:
         # Try V2 first
         logger.debug("checking for v2 API")
         v2_client = BaseClientV2(
             host, verify_ssl=verify_ssl, username=username, password=password,
-            auth_service_url=auth_service_url,
+            auth_service_url=auth_service_url, auth_service_name=auth_service_name
         )
         try:
             v2_client.check_status()
